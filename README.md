@@ -24,6 +24,40 @@
 
 ---
 
+## 📊 Project Status & Audit Report
+
+<div align="center">
+
+| Category | Score | Status |
+|----------|-------|--------|
+| **Overall** | 65/100 | 🟡 Development |
+| Security | 35/100 | 🔴 Critical Issues |
+| Architecture | 85/100 | 🟢 Good |
+| Code Quality | 70/100 | 🟡 Needs Work |
+| Legal Compliance | 100/100 | 🟢 Complete |
+| Documentation | 90/100 | 🟢 Excellent |
+
+</div>
+
+### ⚠️ Current Status: **NOT PRODUCTION READY**
+
+> **Last Audit:** 2025-12-17 | See [COMPREHENSIVE_AUDIT_REPORT.md](COMPREHENSIVE_AUDIT_REPORT.md) for full details
+
+**Critical Issues to Fix:**
+1. 🔴 Authentication disabled on destructive endpoints (delete-all)
+2. 🔴 Hardcoded JWT secret key in config
+3. 🔴 Rate limiting disabled
+4. 🟠 Invalid Docker base images (Python 3.14, Node 25)
+5. 🟠 Open user registration without verification
+
+**Strengths:**
+- ✅ **100% Legal Compliance** - All 16 fields per 労働者派遣法第26条
+- ✅ **Excellent Architecture** - Clean 3-tier separation
+- ✅ **Comprehensive Documentation** - 69 markdown files
+- ✅ **Modern Tech Stack** - FastAPI + Next.js 15 + PostgreSQL
+
+---
+
 ## 📝 Descripción del Proyecto
 
 ### 🇯🇵 日本語
