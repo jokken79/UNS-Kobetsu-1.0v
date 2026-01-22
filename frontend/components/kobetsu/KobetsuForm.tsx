@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { factoryApi, employeeApi, kobetsuApi } from '@/lib/api'
-import type { KobetsuCreate, FactoryListItem, EmployeeListItem } from '@/types'
+import type { KobetsuCreate, FactoryListItem, EmployeeListItem, FactoryLineResponse } from '@/types'
 import {
   HAKEN_MOTO_COMPLAINT_CONTACT,
   HAKEN_MOTO_MANAGER,
@@ -60,6 +60,9 @@ export function KobetsuForm({ initialData, onSubmit, isLoading }: KobetsuFormPro
 
   const [factories, setFactories] = useState<FactoryListItem[]>([])
   const [loadingFactories, setLoadingFactories] = useState(false)
+  const [factoryLines, setFactoryLines] = useState<FactoryLineResponse[]>([])
+  const [loadingLines, setLoadingLines] = useState(false)
+  const [selectedLineId, setSelectedLineId] = useState<number | undefined>(undefined)
   const [employees, setEmployees] = useState<EmployeeListItem[]>([])
   const [loadingEmployees, setLoadingEmployees] = useState(false)
   const [employeeSearch, setEmployeeSearch] = useState('')
@@ -135,7 +138,7 @@ export function KobetsuForm({ initialData, onSubmit, isLoading }: KobetsuFormPro
         return
       }
 
-      if (!formData.factory_id) {
+      if (!selectedLineId) {
         setCompatibilityStatus(null)
         return
       }
@@ -144,7 +147,7 @@ export function KobetsuForm({ initialData, onSubmit, isLoading }: KobetsuFormPro
       try {
         const result = await kobetsuApi.validateEmployeeCompatibility({
           employee_ids: formData.employee_ids,
-          factory_line_id: formData.factory_id, // TODO: should be factory_line_id, not factory_id
+          factory_line_id: selectedLineId,
           hourly_rate: formData.hourly_rate || DEFAULT_WORK_CONDITIONS.hourly_rate,
         })
         setCompatibilityStatus(result)
@@ -157,7 +160,7 @@ export function KobetsuForm({ initialData, onSubmit, isLoading }: KobetsuFormPro
     }
 
     validateCompatibility()
-  }, [formData.employee_ids, formData.factory_id, formData.hourly_rate])
+  }, [formData.employee_ids, selectedLineId, formData.hourly_rate])
 
   // Filter employees based on search (by 社員№ or name)
   const filteredEmployees = useMemo(() => {
@@ -188,13 +191,26 @@ export function KobetsuForm({ initialData, onSubmit, isLoading }: KobetsuFormPro
 
   const handleFactoryChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const factoryId = Number(e.target.value)
-    if (!factoryId) return
+    if (!factoryId) {
+      setFactoryLines([])
+      setSelectedLineId(undefined)
+      return
+    }
 
     setFormData(prev => ({ ...prev, factory_id: factoryId }))
+    setSelectedLineId(undefined) // Reset line selection when factory changes
+    setLoadingLines(true)
 
     // Fetch detailed factory data to pre-fill form
     try {
         const factory = await factoryApi.getById(factoryId)
+        setFactoryLines(factory.lines || [])
+
+        // Auto-select if only one line
+        if (factory.lines && factory.lines.length === 1) {
+          setSelectedLineId(factory.lines[0].id)
+        }
+
         setFormData(prev => ({
             ...prev,
             factory_id: factoryId,
@@ -218,6 +234,31 @@ export function KobetsuForm({ initialData, onSubmit, isLoading }: KobetsuFormPro
         }))
     } catch (err) {
         // Failed to load factory details - error handled silently
+        setFactoryLines([])
+    } finally {
+        setLoadingLines(false)
+    }
+  }
+
+  const handleLineChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const lineId = Number(e.target.value)
+    setSelectedLineId(lineId || undefined)
+
+    // Pre-fill line-specific data
+    if (lineId) {
+      const selectedLine = factoryLines.find(l => l.id === lineId)
+      if (selectedLine) {
+        setFormData(prev => ({
+          ...prev,
+          work_content: selectedLine.job_description || prev.work_content,
+          responsibility_level: selectedLine.responsibility_level || prev.responsibility_level,
+          supervisor_department: selectedLine.supervisor_department || prev.supervisor_department,
+          supervisor_position: selectedLine.supervisor_position || prev.supervisor_position,
+          supervisor_name: selectedLine.supervisor_name || prev.supervisor_name,
+          hourly_rate: selectedLine.hourly_rate || prev.hourly_rate,
+          overtime_rate: selectedLine.overtime_rate || prev.overtime_rate,
+        }))
+      }
     }
   }
 
@@ -260,6 +301,9 @@ export function KobetsuForm({ initialData, onSubmit, isLoading }: KobetsuFormPro
 
     if (!formData.factory_id) {
         newErrors.factory_id = '工場を選択してください'
+    }
+    if (!selectedLineId) {
+        newErrors.factory_line_id = 'ラインを選択してください'
     }
     if (!formData.employee_ids || formData.employee_ids.length === 0) {
         newErrors.employee_ids = '派遣労働者を最低1名選択してください'
@@ -314,7 +358,7 @@ export function KobetsuForm({ initialData, onSubmit, isLoading }: KobetsuFormPro
         <h3 className="text-lg font-medium text-gray-900 mb-4 pb-2 border-b">
           派遣先選択
         </h3>
-        <div className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
                 <label className="form-label">工場を選択 *</label>
                 <select
@@ -335,6 +379,33 @@ export function KobetsuForm({ initialData, onSubmit, isLoading }: KobetsuFormPro
                 {loadingFactories && <p className="text-sm text-gray-500 mt-1">読み込み中...</p>}
                 {errors.factory_id && (
                   <p className="form-error">{errors.factory_id}</p>
+                )}
+            </div>
+            <div>
+                <label className="form-label">ライン（配属先）を選択 *</label>
+                <select
+                    name="factory_line_id"
+                    value={selectedLineId || ''}
+                    onChange={handleLineChange}
+                    className={`form-select ${errors.factory_line_id ? 'border-red-500' : ''}`}
+                    disabled={!formData.factory_id || loadingLines}
+                    required
+                >
+                    <option value="">-- ラインを選択 --</option>
+                    {factoryLines.map(line => (
+                        <option key={line.id} value={line.id}>
+                            {line.department ? `${line.department} - ` : ''}{line.line_name || line.line_id || `ライン ${line.id}`}
+                            {line.hourly_rate ? ` (¥${line.hourly_rate}/h)` : ''}
+                        </option>
+                    ))}
+                </select>
+                {loadingLines && <p className="text-sm text-gray-500 mt-1">ライン読み込み中...</p>}
+                {!formData.factory_id && <p className="text-sm text-gray-500 mt-1">先に工場を選択してください</p>}
+                {formData.factory_id && factoryLines.length === 0 && !loadingLines && (
+                  <p className="text-sm text-orange-600 mt-1">この工場にはラインが登録されていません</p>
+                )}
+                {errors.factory_line_id && (
+                  <p className="form-error">{errors.factory_line_id}</p>
                 )}
             </div>
         </div>
